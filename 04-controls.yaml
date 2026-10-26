@@ -1,0 +1,51 @@
+# Separate policies on purpose: two policies that set the same area on one
+# route overwrite each other silently.
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: pii-guard
+  namespace: kserve-test
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: mock-llm-kserve-route
+  backend:
+    ai:
+      promptGuard:
+        request:
+          - regex:
+              builtins: [CreditCard, Ssn, Email]
+              action: Reject
+            response:
+              message: "Request contains PII"
+        response:
+          - regex:
+              builtins: [CreditCard]
+              action: Mask      # buffered responses only; use Reject for streams
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: team-token-budget
+  namespace: kserve-test
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: mock-llm-kserve-route
+  traffic:
+    rateLimit:
+      global:
+        domain: team-budgets
+        backendRef:
+          kind: Service
+          name: ratelimit
+          namespace: ratelimit
+          port: 8081
+        descriptors:
+          - entries:
+              - name: team
+                expression: jwt.team
+            unit: Tokens
