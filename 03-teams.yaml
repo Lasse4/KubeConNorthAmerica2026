@@ -1,0 +1,38 @@
+# This file is the template; the README's token step renders tokens/03-teams.yaml.
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: team-jwt
+  namespace: kserve-test
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: mock-llm-kserve-route
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      providers:
+        - issuer: kubecon-demo
+          jwks:
+            inline: '__JWKS__'
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: team-access-log
+  namespace: kserve
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: kserve-ingress-gateway
+  frontend:
+    accessLog:
+      attributes:
+        add:
+          - name: team
+            expression: jwt.team
+          - name: service
+            expression: jwt.sub

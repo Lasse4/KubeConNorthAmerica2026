@@ -1,0 +1,88 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: call-model
+  namespace: apps
+data:
+  call-model.sh: |
+    TOKEN=$(printf %s "$TOKEN" | tr -d '\r\n')   # a newline in the header would cut off the body
+    prompt=$(i=0; while [ $i -lt "$WORDS" ]; do printf 'context '; i=$((i+1)); done)
+    body="{\"model\":\"mock-llm\",\"messages\":[{\"role\":\"user\",\"content\":\"$prompt\"}]}"
+    n=0
+    while [ $n -lt "$REQUESTS" ]; do
+      curl -s -o /dev/null -w '%{http_code}\n' \
+        http://kserve-ingress-gateway.kserve.svc.cluster.local/v1/chat/completions \
+        -H 'Content-Type: application/json' \
+        -H "Authorization: Bearer $TOKEN" \
+        -d "$body"
+      n=$((n+1))
+    done | sort | uniq -c
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nightly-summaries
+  namespace: apps
+  labels:
+    demo: traffic
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: job
+          image: curlimages/curl:8.11.1
+          command: ["sh", "/scripts/call-model.sh"]
+          env:
+            - name: REQUESTS
+              value: "120"
+            - name: WORDS
+              value: "70"
+            - name: TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: team-tokens
+                  key: data
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: call-model
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: code-review-agent
+  namespace: apps
+  labels:
+    demo: traffic
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: job
+          image: curlimages/curl:8.11.1
+          command: ["sh", "/scripts/call-model.sh"]
+          env:
+            - name: REQUESTS
+              value: "15"
+            - name: WORDS
+              value: "495"
+            - name: TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: team-tokens
+                  key: platform
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: call-model
