@@ -1,6 +1,3 @@
-# Separate policies on purpose: two policies that set the same area on one
-# route overwrite each other silently.
----
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayPolicy
 metadata:
@@ -23,7 +20,7 @@ spec:
         response:
           - regex:
               builtins: [CreditCard]
-              action: Mask      # buffered responses only; use Reject for streams
+              action: Mask
 ---
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayPolicy

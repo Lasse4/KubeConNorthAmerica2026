@@ -31,8 +31,6 @@ spec:
           - "8000"
           - --mode
           - echo
-          # Not in the guide: the default 1,024-token context is too small
-          # for ML research's prompts.
           - --max-model-len
           - "32768"
         ports:

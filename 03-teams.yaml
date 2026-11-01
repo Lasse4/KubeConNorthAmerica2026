@@ -1,5 +1,3 @@
-# This file is the template; the README's token step renders tokens/03-teams.yaml.
----
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayPolicy
 metadata:
