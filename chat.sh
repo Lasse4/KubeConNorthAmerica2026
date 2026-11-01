@@ -16,8 +16,17 @@ chat() { # prompt, curl options
 }
 
 if [[ $prompt == --loop ]]; then
+  # Big prompts until the budget has said 429 three times. Right after ./traffic.sh that is
+  # 200 200 429 429 429. If the budget hour has turned since then, a few more 200s come first.
   big=$(printf 'context %.0s' $(seq 7000))
-  for _ in 1 2 3 4 5; do chat "$big" -o /dev/null -w '%{http_code} '; sleep 0.5; done
+  denied=0
+  for _ in $(seq 10); do
+    code=$(chat "$big" -o /dev/null -w '%{http_code}')
+    printf '%s ' "$code"
+    [[ $code == 429 ]] && denied=$((denied + 1))
+    ((denied < 3)) || break
+    sleep 0.5
+  done
   echo
 else
   chat "$prompt" -w '\n%{http_code}\n'

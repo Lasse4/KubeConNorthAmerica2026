@@ -15,9 +15,6 @@ send() { # team, requests, words per prompt
   done | sort | uniq -c | show "$1"
 }
 
-# Budgets count per clock hour: do not start just before they reset.
-while (( $(date +%s) % 3600 > 3300 )); do echo "Budget hour ends soon, waiting ..."; sleep 30; done
-
 # Fresh budgets, and cost-by-team.sh counts from here.
 kubectl exec -n ratelimit deploy/redis -- redis-cli FLUSHALL >/dev/null
 date -u +%Y-%m-%dT%H:%M:%SZ > tokens/last-traffic-start

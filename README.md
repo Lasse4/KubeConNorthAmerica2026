@@ -5,18 +5,20 @@ by Lasse Vierow. Not for production, just an example.
 
 Everything runs locally in kind: **KServe** deploys the model, **agentgateway** routes and
 meters every request, a **rate limit service** keeps the budgets. The model is
-`llm-d-inference-sim`: no GPU, no API key, and no internet on the day of the talk.
+`llm-d-inference-sim`: no GPU, no API key, and no internet once the images are downloaded.
 
 ## How it works
 
+![Demo setup: what runs where](docs/architecture.png)
+
 1. Four teams call the same model, each with its own JWT.
 2. agentgateway writes team, model, tokens and cost into every access log line.
-3. A guardrail stops PII before it reaches the model. A budget stops a team at 60,000 tokens per hour.
+3. A guardrail stops PII before it reaches the model. A budget stops a team at 60,000 tokens per hour (tokens, not dollars).
 4. If our model goes down, a paid cloud API takes over, and the log shows what that costs.
 
 The team with the most requests is not the team with the biggest bill.
 
-## Setup (done before the talk)
+## Setup
 
 ### 1. Download (once, with internet)
 
@@ -132,7 +134,6 @@ for t in support:customer-chatbot ml-research:prompt-experiments data:nightly-su
   printf '%s' "$head.$body.$(printf '%s' "$head.$body" | openssl dgst -sha256 -sign tokens/key.pem | b64)" > "tokens/${t%:*}.jwt"
 done
 
-# Public key as JWKS: the 256 modulus bytes sit at offset 33 of a 2048-bit key in DER.
 n=$(openssl rsa -in tokens/key.pem -pubout -outform DER 2>/dev/null | tail -c +34 | head -c 256 | b64)
 sed "/inline:/s|__JWKS__|{\"keys\":[{\"kty\":\"RSA\",\"alg\":\"RS256\",\"kid\":\"demo\",\"n\":\"$n\",\"e\":\"AQAB\"}]}|" 03-teams.yaml > tokens/03-teams.yaml
 
@@ -140,15 +141,13 @@ kubectl create secret generic team-tokens -n apps --from-file=data=tokens/data.j
   --from-file=platform=tokens/platform.jwt --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-Rehearse the demo once with Wi-Fi off, then [reset](#reset).
-
 ## Demo
 
 | Script | What it does |
 |---|---|
 | `traffic.sh` | Four teams send traffic, two from outside the cluster, two from inside |
 | `cost-by-team.sh` | Requests, tokens and cost per team, from the gateway log |
-| `chat.sh` | One prompt as one team; `--loop` sends five big prompts |
+| `chat.sh` | One prompt as one team; `--loop` sends big prompts until the budget runs out |
 
 ### 1. Deploy the model
 
@@ -213,20 +212,21 @@ kubectl apply -f tokens/03-teams.yaml -f 04-controls.yaml
 ./cost-by-team.sh
 ```
 
-The nightly summaries send the most requests, ML research uses the most tokens.
+Compare `% requests` with `% tokens`: the nightly summaries send about 65% of the requests,
+but they are not the team with the biggest bill.
 
 ### 5. Guardrail and budget
 
 ```sh
-./chat.sh support 'my card is 4111 1111 1111 1111'  # 403 Request contains PII
+./chat.sh support 'my card is 4111 1111 1111 1111'
 ```
 
 ```sh
-./chat.sh ml-research --loop  # 200 200 429 429 429
+./chat.sh ml-research --loop
 ```
 
 ```sh
-./chat.sh support 'hello again'  # 200
+./chat.sh support 'hello again'
 ```
 
 ### 6. Failover without a surprise bill
@@ -255,11 +255,17 @@ kubectl logs -n kserve deploy/kserve-ingress-gateway --tail 50 | grep 'http.stat
   | grep -oE '(gen_ai.response.model|agw.ai.usage.cost.total)=[^ ]+' | paste - -
 ```
 
-Nine times the price, and the log says exactly which model answered.
+Nine times the price for this prompt, and the log says exactly which model answered.
+
+The ratio depends on the mix: input tokens cost about 6× more on the cloud ($2.50 vs $0.40),
+output tokens 25× more ($10.00 vs $0.40). The budget still counts tokens, not dollars, so
+while the cloud answers, the same 60,000 tokens cost 6–25× more.
 
 ---
 
 ### Reset
+
+Back to step 1 of the demo; the cluster and the setup stay.
 
 ```sh
 kubectl delete namespace kserve-test
